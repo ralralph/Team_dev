@@ -1,6 +1,7 @@
 class TeamsController < ApplicationController
   before_action :authenticate_user!
   before_action :set_team, only: %i[show edit update destroy]
+  rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
 
   def index
     @teams = Team.all
@@ -38,6 +39,14 @@ class TeamsController < ApplicationController
     end
   end
 
+  def transfer
+    @team = Team.friendly.find(params[:id])
+    assign = Assign.find(params[:format])
+    @team.update(owner_id: assign.user_id)
+    TeamMailer.transfer_mail(assign.user.email, @team.name).deliver
+    redirect_to @team, notice: 'リーダーを変更しました！'
+  end
+
   def destroy
     @team.destroy
     redirect_to teams_url, notice: 'チーム削除に成功しました！'
@@ -51,9 +60,15 @@ class TeamsController < ApplicationController
 
   def set_team
     @team = Team.friendly.find(params[:id])
+    authorize @team
   end
 
   def team_params
     params.fetch(:team, {}).permit %i[name icon icon_cache owner_id keep_team_id]
+  end
+
+  def user_not_authorized
+    flash[:alert] = '権限がありません。'
+    redirect_to(request.referrer || root_path)
   end
 end
